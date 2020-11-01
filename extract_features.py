@@ -6,7 +6,7 @@ import numpy as np
 sourcedir = './GraphProt_CLIP_sequences/'
 fnums=168+96+2
 files=[]
-n2num={'a':0,'u':1,'c':2,'g':3}
+n2num={'a':0,'c':1,'g':2,'u':3}
 
 def kmer2idx(s):
     idx=0
