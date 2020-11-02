@@ -152,8 +152,8 @@ def one_hot_features(line):
 		indexes.append(base_dict[i])
 	indexes = np.array(indexes)
 	one_hot = to_categorical(indexes, num_classes=None)
-	# for i in range(150,one_hot.shape[0]-150):
-	# 	one_hot[i] = one_hot[i] * 5
+	for i in range(150,one_hot.shape[0]-150):
+		one_hot[i] = one_hot[i] * 5
 		# print(one_hot[i])
 	if one_hot.shape[1] != 64:
 		add = np.zeros((one_hot.shape[0],64-one_hot.shape[1]))

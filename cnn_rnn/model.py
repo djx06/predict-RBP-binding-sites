@@ -11,33 +11,43 @@ class CNN(nn.Module):
 		super(CNN, self).__init__()
 		self.maxlen = maxlen
 		# Define your layers here
+		# self.conv1d = nn.Conv1d(maxlen,128,3,padding=1)
 		self.layers = nn.Sequential(
-			nn.Conv1d(maxlen,128,3,padding=1),
+			nn.Conv1d(64,128,3),
+			nn.BatchNorm1d(128),
+			nn.ReLU(inplace=True),
+			nn.Dropout(0.2),
+			nn.MaxPool1d(12,stride=12),
+			nn.Conv1d(128,128,3,padding=1),
 			nn.BatchNorm1d(128),
 			nn.ReLU(inplace=True),
 			nn.Dropout(0.2),
 			nn.MaxPool1d(3,stride=3),
-			# nn.Conv1d(64,64,3,padding=1),
-			# nn.BatchNorm1d(64),
-			# nn.ReLU(inplace=True),
-			# nn.Dropout(0.2),
-			# nn.MaxPool1d(3,stride=3),
 		)
-		self.linear = nn.Linear(2688,2)
+		self.L = nn.Sequential(
+		nn.Linear(1280,128),
+		nn.ReLU(inplace=True),
+		nn.Linear(128,2)
+		)
+		
 		self.loss = nn.CrossEntropyLoss()
 
 	def forward(self, x, y=None):	
 		# the 2-class prediction output is named as "logits"
 		# inp = torch.tensor(x, dtype=torch.float32)
 		x = x.float()
+		x = x.permute(0,2,1)
+		# print(x.shape)
 		# print(x.shape)
 		if len(x.shape) == 2:
 			x = x.unsqueeze(0)
-		logits = self.layers(x)
+		# x = self.conv1d(x)
 		# print(x.shape)
-		logits = logits.reshape(-1,2688)
-		logits = self.linear(logits)
-
+		logits = self.layers(x)
+		# print(logits.shape)
+		logits.permute(0,2,1)
+		logits = logits.reshape(-1,1280)
+		logits = self.L(logits)
 		pred = torch.argmax(logits, 1)  # Calculate the prediction result
 		if y is None:
 			return torch.softmax(logits,dim=1)
