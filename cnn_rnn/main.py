@@ -23,8 +23,8 @@ parser.add_argument('--learning_rate', type=float, default=1e-3,
 	help='Learning rate during optimization. Default: 1e-3')
 parser.add_argument('--drop_rate', type=float, default=0.5,
 	help='Drop rate of the Dropout Layer. Default: 0.5')
-parser.add_argument('--is_train', type=bool, default=True,
-	help='True to train and False to inference. Default: True')
+parser.add_argument('--is_test', action = "store_true",
+	help='True to train and False to inference. Default: False')
 parser.add_argument('--inference_version', type=int, default=0,
 	help='The version for inference. Set 0 to use latest checkpoint. Default: 0')
 parser.add_argument('--pathname',type=str,default='../GraphProt_CLIP_sequences/',
@@ -39,6 +39,8 @@ parser.add_argument('--name',type=str,default='cnn',
 	help='Name of this model')	
 parser.add_argument('--data_dir',type=str,default='../GraphProt_CLIP_sequences/PARCLIP_MOV10_Sievers.ls.positives.fa',
 	help='Test path')	
+parser.add_argument('--savepred',type=str,default='./predict.txt',
+	help='Prediction file')	
 
 args = parser.parse_args()
 
@@ -47,7 +49,7 @@ bases = ['A', 'C', 'G', 'U']
 # base_dict = {'A': 0, 'C': 1, 'G': 2, 'U': 3}
 base_dict = {}
 bases_len = len(bases)
-max_len = 76
+max_len = 376
 bags = []
 def convert_to_index(str,word_len):
    '''
@@ -140,7 +142,7 @@ def one_hot_features(line):
 		core_seq = core_seq.replace(i, '')
 	core_seq = core_seq.replace('T','U')
 	core_seq = core_seq.replace('N','')
-	line = core_seq
+	# line = core_seq
 	line = line.upper()
 	line = line.replace('T','U')
 	line = line.replace('N','')
@@ -255,7 +257,7 @@ if __name__ == '__main__':
 	for key in bags:
 		base_dict[key] = count
 		count+=1
-	if args.is_train:
+	if not args.is_test:
 
 		pos_filename=os.path.join(args.pathname,args.dataset+'.positives.fa')
 		neg_filename=os.path.join(args.pathname,args.dataset+'.negatives.fa')
@@ -294,7 +296,7 @@ if __name__ == '__main__':
 			if val_acc >= best_val_acc:
 				best_val_acc = val_acc
 				best_epoch = epoch
-				test_acc, test_loss = valid_epoch(model, X_test, y_test)
+				# test_acc, test_loss = valid_epoch(model, X_test, y_test)
 				with open(os.path.join(args.train_dir, 'checkpoint_{}.pth.tar'.format(args.name)), 'wb') as fout:
 					torch.save(model, fout)
 			# 	with open(os.path.join(args.train_dir, 'checkpoint_0.pth.tar'), 'wb') as fout:
@@ -318,7 +320,7 @@ if __name__ == '__main__':
 			pre_losses = pre_losses[1:] + [train_loss]
 
 	else:
-		print ("Predicting",filename)
+		print ("Predicting",args.data_dir)
 		if args.model == 'rnn':
 			model = LSTM(max_len,drop_rate=0.5)
 		else:
@@ -329,25 +331,25 @@ if __name__ == '__main__':
 			model = torch.load(model_path)
 		start=time.time()
 		
-		if savepred is not None:
-			fout=open(savepred,'w')
+		if args.savepred is not None:
+			fout=open(args.savepred,'w')
 		try:
-			for line in open(filename):
+			for line in open(args.data_dir):
 				if line[0]=='>':
-					if savepred is not None:
-					fout.write(line)
+					if args.savepred is not None:
+						fout.write(line)
 						continue
 				elif ('n' in line or 'N' in line):
-					if savepred is not None:
-					fout.write('Error!\n')
+					if args.savepred is not None:
+						fout.write('Error!\n')
 				else:
 					line=line.strip('\n').strip('\r')
 					testX=np.array(one_hot_features(line.strip('\n').strip('\r')))
-					pred = inference(model, testX)[1]
-					if savepred is not None:
-						fout.write('%f\n'%float(pred[0]))
+					pred = inference(model, testX)[0]
+					if args.savepred is not None:
+						fout.write('%f\n'%float(pred[1]))
 		finally:
-			if savepred is not None:
+			if args.savepred is not None:
 				fout.close()
 
 

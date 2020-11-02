@@ -15,7 +15,7 @@ class CNN(nn.Module):
 			nn.Conv1d(maxlen,128,3,padding=1),
 			nn.BatchNorm1d(128),
 			nn.ReLU(inplace=True),
-			nn.Dropout(0.5),
+			nn.Dropout(0.2),
 			nn.MaxPool1d(3,stride=3),
 			# nn.Conv1d(64,64,3,padding=1),
 			# nn.BatchNorm1d(64),
@@ -31,16 +31,16 @@ class CNN(nn.Module):
 		# inp = torch.tensor(x, dtype=torch.float32)
 		x = x.float()
 		# print(x.shape)
-		if len(x.shape) == 1:
+		if len(x.shape) == 2:
 			x = x.unsqueeze(0)
 		logits = self.layers(x)
 		# print(x.shape)
-		logits = logits.reshape(100,-1)
+		logits = logits.reshape(-1,2688)
 		logits = self.linear(logits)
 
 		pred = torch.argmax(logits, 1)  # Calculate the prediction result
 		if y is None:
-			return torch.softmax(logits)
+			return torch.softmax(logits,dim=1)
 		# print(pred)
 		# print(y)
 		# labels = torch.tensor(y,dtype=torch.int64)
