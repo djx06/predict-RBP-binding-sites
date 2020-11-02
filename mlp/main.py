@@ -18,13 +18,13 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--batch_size', type=int, default=100,
 	help='Batch size for mini-batch training and evaluating. Default: 100')
-parser.add_argument('--num_epochs', type=int, default=200,
+parser.add_argument('--num_epochs', type=int, default=50,
 	help='Number of training epoch. Default: 20')
 parser.add_argument('--learning_rate', type=float, default=1e-3,
 	help='Learning rate during optimization. Default: 1e-3')
 parser.add_argument('--drop_rate', type=float, default=0.5,
 	help='Drop rate of the Dropout Layer. Default: 0.5')
-parser.add_argument('--is_train', type=bool, default=True,
+parser.add_argument('--is_test',action="store_true",
 	help='True to train and False to inference. Default: True')
 parser.add_argument('--inference_version', type=int, default=0,
 	help='The version for inference. Set 0 to use latest checkpoint. Default: 0')
@@ -32,8 +32,16 @@ parser.add_argument('--pathname',type=str,default='./data',
 	help='Pathname of training data')
 parser.add_argument('--dataset',type=str,default='./PARCLIP_MOV10_Sievers.train',
 	help='Name of dataset')	
-parser.add_argument('--model',type=str,default='cnn',
+parser.add_argument('--model',type=str,default='mlp',
 	help='Choose an ML Model')	
+parser.add_argument('--name',type=str,default='mlp',
+	help='Name of this model')	
+parser.add_argument('--data_dir',type=str,default='./data/PARCLIP_MOV10_Sievers.ls.positives.txt',
+	help='Test path')	
+parser.add_argument('--train_dir',type=str,default='./train',
+	help='Train Direction')
+parser.add_argument('--savepred',type=str,default='predict.txt',
+	help='Prediction')
 args = parser.parse_args()
 
 
@@ -82,6 +90,33 @@ def shuffle(X, y, shuffle_parts):
 #    trainX=train[:,1:].astype('float32')
 #    trainY=train[:,0].astype('float32')
 #    return trainX,trainY
+
+def predicting(filename,model,savepred=None):
+   '''
+   predict for sequences in 'filename' using the preprocessing transform 'scaler' and the trained model '_model'
+   '''
+   print ("Predicting",filename)
+   start=time.time()
+   if savepred is not None:
+      fout=open(savepred,'w')
+   try:
+      for line in open(filename):
+         if line[0]=='>':
+            if savepred is not None:
+               fout.write(line)
+            continue
+         elif ('n' in line or 'N' in line):
+            if savepred is not None:
+               fout.write('Error!\n')
+         else:
+            line=line.strip('\n').strip('\r')
+            testX=np.array(extract_features(line))[None,:]
+            pred = model.predict_proba(testX)[:,1]
+            if savepred is not None:
+               fout.write('%f\n'%float(pred[0]))
+   finally:
+      if savepred is not None:
+         fout.close()
 
 def leave_out(trainX,trainY):
    '''
@@ -248,15 +283,16 @@ if __name__ == '__main__':
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	device = torch.device("cpu")
 	# print(device)
-	# if not os.path.exists(args.train_dir):
-	# 	os.mkdir(args.train_dir)
+	if not os.path.exists(args.train_dir):
+		os.mkdir(args.train_dir)
 	get_bags("",3,bases)
 	print(bags)
 	count = 0
 	for key in bags:
 		base_dict[key] = count
 		count+=1
-	if args.is_train:
+	# print(args.is_train)
+	if not args.is_test:
 
 		pos_filename=os.path.join(args.pathname,args.dataset+'.positives.txt')
 		neg_filename=os.path.join(args.pathname,args.dataset+'.negatives.txt')
@@ -292,11 +328,9 @@ if __name__ == '__main__':
 			if val_acc >= best_val_acc:
 				best_val_acc = val_acc
 				best_epoch = epoch
-			# 	test_acc, test_loss = valid_epoch(model, X_test, y_test)
-			# 	with open(os.path.join(args.train_dir, 'checkpoint_{}.pth.tar'.format(epoch)), 'wb') as fout:
-			# 		torch.save(model, fout)
-			# 	with open(os.path.join(args.train_dir, 'checkpoint_0.pth.tar'), 'wb') as fout:
-			# 		torch.save(model, fout)
+				# test_acc, test_loss = valid_epoch(model, X_test, y_test)
+				with open(os.path.join(args.train_dir, 'checkpoint_{}.pth.tar'.format(args.name)), 'wb') as fout:
+					torch.save(model, fout)
 
 			epoch_time = time.time() - start_time
 			print("Epoch " + str(epoch) + " of " + str(args.num_epochs) + " took " + str(epoch_time) + "s")
@@ -318,19 +352,46 @@ if __name__ == '__main__':
 			pre_losses = pre_losses[1:] + [train_loss]
 
 	else:
-
+		print ("Predicting",args.data_dir)
 		model = MLP(max_len,drop_rate=0.5)
 		model.to(device)
-		model_path = os.path.join(args.train_dir, 'checkpoint_%d.pth.tar' % args.inference_version)
+		model_path = os.path.join(args.train_dir, 'checkpoint_%s.pth.tar' % args.name)
 		if os.path.exists(model_path):
 			model = torch.load(model_path)
+		start=time.time()
+		
+		f = open(args.data_dir,'r')
+		data = json.load(f)
+		# for line in data:
+		# 	valid.append(1)
+		# 	total_output.append(data[line])
+		# output_arr=np.array(total_output)
 
-		X_train, X_test, y_train, y_test = load_cifar_4d(args.data_dir)
+		if args.savepred is not None:
+			fout=open(args.savepred,'w')
+		try:
+			for line in data:
+				fout.write(line+'\n')
+				testX = np.array(data[line])
+				pred = inference(model, testX)[0]
+				# print(pred)
+				if args.savepred is not None:
+					fout.write('%f\n'%float(pred[1]))
+		finally:
+			if args.savepred is not None:
+				fout.close()
 
-		count = 0
-		for i in range(len(X_test)):
-			test_image = X_test[i].reshape((1, 3, 32, 32))
-			result = inference(model, test_image)[0]
-			if result == y_test[i]:
-				count += 1
-		print("test accuracy: {}".format(float(count) / len(X_test)))
+		# model.to(device)
+		# model_path = os.path.join(args.train_dir, 'checkpoint_%d.pth.tar' % args.inference_version)
+		# if os.path.exists(model_path):
+		# 	model = torch.load(model_path)
+
+		# X_train, X_test, y_train, y_test = load_data(args.data_dir)
+
+		# count = 0
+		# for i in range(len(X_test)):
+		# 	test_image = X_test[i].reshape((1, 3, 32, 32))
+		# 	result = inference(model, test_image)[0]
+		# 	if result == y_test[i]:
+		# 		count += 1
+		# print("test accuracy: {}".format(float(count) / len(X_test)))

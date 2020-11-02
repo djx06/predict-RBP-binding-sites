@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--batch_size', type=int, default=100,
 	help='Batch size for mini-batch training and evaluating. Default: 100')
-parser.add_argument('--num_epochs', type=int, default=200,
+parser.add_argument('--num_epochs', type=int, default=20,
 	help='Number of training epoch. Default: 20')
 parser.add_argument('--learning_rate', type=float, default=1e-3,
 	help='Learning rate during optimization. Default: 1e-3')
@@ -29,10 +29,17 @@ parser.add_argument('--inference_version', type=int, default=0,
 	help='The version for inference. Set 0 to use latest checkpoint. Default: 0')
 parser.add_argument('--pathname',type=str,default='../GraphProt_CLIP_sequences/',
 	help='Pathname of training data')
+parser.add_argument('--train_dir',type=str,default='./train',
+	help='Train Direction')
 parser.add_argument('--dataset',type=str,default='./PARCLIP_MOV10_Sievers.train',
 	help='Name of dataset')	
 parser.add_argument('--model',type=str,default='cnn',
 	help='Choose an ML Model')	
+parser.add_argument('--name',type=str,default='cnn',
+	help='Name of this model')	
+parser.add_argument('--data_dir',type=str,default='../GraphProt_CLIP_sequences/PARCLIP_MOV10_Sievers.ls.positives.fa',
+	help='Test path')	
+
 args = parser.parse_args()
 
 
@@ -40,7 +47,7 @@ bases = ['A', 'C', 'G', 'U']
 # base_dict = {'A': 0, 'C': 1, 'G': 2, 'U': 3}
 base_dict = {}
 bases_len = len(bases)
-max_len = 376
+max_len = 76
 bags = []
 def convert_to_index(str,word_len):
    '''
@@ -69,18 +76,6 @@ def shuffle(X, y, shuffle_parts):
 
 	return X, y
 
-
-# def shuffle(trainX,trainY):
-#    '''
-#    random shuffle the training data
-#    '''
-#    np.random.seed(0)
-#    train=np.hstack([trainY[:,None],trainX]).astype('float32')
-#    train=np.random.permutation(train)
-#    train=train[:120000,:]
-#    trainX=train[:,1:].astype('float32')
-#    trainY=train[:,0].astype('float32')
-#    return trainX,trainY
 
 def leave_out(trainX,trainY):
    '''
@@ -145,7 +140,7 @@ def one_hot_features(line):
 		core_seq = core_seq.replace(i, '')
 	core_seq = core_seq.replace('T','U')
 	core_seq = core_seq.replace('N','')
-	# line = core_seq
+	line = core_seq
 	line = line.upper()
 	line = line.replace('T','U')
 	line = line.replace('N','')
@@ -252,8 +247,8 @@ if __name__ == '__main__':
 	device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 	device = torch.device("cpu")
 	# print(device)
-	# if not os.path.exists(args.train_dir):
-	# 	os.mkdir(args.train_dir)
+	if not os.path.exists(args.train_dir):
+		os.mkdir(args.train_dir)
 	get_bags("",3,bases)
 	print(bags)
 	count = 0
@@ -299,9 +294,9 @@ if __name__ == '__main__':
 			if val_acc >= best_val_acc:
 				best_val_acc = val_acc
 				best_epoch = epoch
-			# 	test_acc, test_loss = valid_epoch(model, X_test, y_test)
-			# 	with open(os.path.join(args.train_dir, 'checkpoint_{}.pth.tar'.format(epoch)), 'wb') as fout:
-			# 		torch.save(model, fout)
+				test_acc, test_loss = valid_epoch(model, X_test, y_test)
+				with open(os.path.join(args.train_dir, 'checkpoint_{}.pth.tar'.format(args.name)), 'wb') as fout:
+					torch.save(model, fout)
 			# 	with open(os.path.join(args.train_dir, 'checkpoint_0.pth.tar'), 'wb') as fout:
 			# 		torch.save(model, fout)
 
@@ -316,8 +311,6 @@ if __name__ == '__main__':
 			print("  validation roc:                " + str(val_roc))
 			print("  best epoch:                    " + str(best_epoch))
 			print("  best validation accuracy:      " + str(best_val_acc))
-			# print("  test loss:                     " + str(test_loss))
-			# print("  test accuracy:                 " + str(test_acc))
 
 			if train_loss > max(pre_losses):
 				for param_group in optimizer.param_groups:
@@ -325,22 +318,41 @@ if __name__ == '__main__':
 			pre_losses = pre_losses[1:] + [train_loss]
 
 	else:
-		print("begin testing")
+		print ("Predicting",filename)
 		if args.model == 'rnn':
 			model = LSTM(max_len,drop_rate=0.5)
 		else:
 			model = CNN(max_len,drop_rate=0.5)
 		model.to(device)
-		model_path = os.path.join(args.train_dir, 'checkpoint_%d.pth.tar' % args.inference_version)
+		model_path = os.path.join(args.train_dir, 'checkpoint_%s.pth.tar' % args.name)
 		if os.path.exists(model_path):
 			model = torch.load(model_path)
+		start=time.time()
+		
+		if savepred is not None:
+			fout=open(savepred,'w')
+		try:
+			for line in open(filename):
+				if line[0]=='>':
+					if savepred is not None:
+					fout.write(line)
+						continue
+				elif ('n' in line or 'N' in line):
+					if savepred is not None:
+					fout.write('Error!\n')
+				else:
+					line=line.strip('\n').strip('\r')
+					testX=np.array(one_hot_features(line.strip('\n').strip('\r')))
+					pred = inference(model, testX)[1]
+					if savepred is not None:
+						fout.write('%f\n'%float(pred[0]))
+		finally:
+			if savepred is not None:
+				fout.close()
 
-		X_train, X_test, y_train, y_test = load_cifar_4d(args.data_dir)
 
-		count = 0
-		for i in range(len(X_test)):
-			test_image = X_test[i].reshape((1, 3, 32, 32))
-			result = inference(model, test_image)[0]
-			if result == y_test[i]:
-				count += 1
-		print("test accuracy: {}".format(float(count) / len(X_test)))
+
+		# count = 0
+		# for i in range(len(X_test)):
+		# 	# test_image = X_test[i].reshape((1, 3, 32, 32))
+		# 	result = inference(model, i)[1]

@@ -22,21 +22,23 @@ class MLP(nn.Module):
 			# nn.Dropout(0.2),
 			# nn.MaxPool1d(3,stride=3),
 		)
-		self.linear = nn.Linear(2688,2)
+		# self.linear = nn.Linear(2688,2)
 		self.loss = nn.CrossEntropyLoss()
 
 	def forward(self, x, y=None):	
 		# the 2-class prediction output is named as "logits"
 		# inp = torch.tensor(x, dtype=torch.float32)
 		x = x.float()
+		if len(x.shape) == 1:
+			x = x.unsqueeze(0)
 		# print(x.shape)
 		logits = self.layers(x)
-		# print(x.shape)
-		logits = logits.reshape(100,-1)
+		# print(logits.shape)
+		# logits = logits.reshape(100,-1)
 
 		pred = torch.argmax(logits, 1)  # Calculate the prediction result
 		if y is None:
-			return pred
+			return torch.softmax(logits,dim=1)
 		# print(pred)
 		# print(y)
 		# labels = torch.tensor(y,dtype=torch.int64)
